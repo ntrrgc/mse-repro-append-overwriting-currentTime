@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='UTF-8' />
+    <meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate' />
+    <meta http-equiv='Pragma' content='no-cache' />
+    <meta http-equiv='Expires' content='0' />
+    <title>BBC test suite video glitch test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <p>The video has two GOPs, each 10s long. An append will overwrite the entire timeline at time=5s, changing the color from yellow to blue.</p>
+    <script type='text/javascript'>
+        function waitForTime(mediaElement, targetTime) {
+            return new Promise(resolve => {
+                const listener = mediaElement.addEventListener("timeupdate", ev => {
+                    if (mediaElement.currentTime < targetTime)
+                        return;
+                    mediaElement.removeEventListener("timeupdate", listener);
+                    resolve();
+                });
+            });
+        }
+        function waitForEvent(node, eventName) {
+            return new Promise(resolve => {
+                node.addEventListener(eventName, (ev) => {
+                    resolve(ev);
+                }, {once: true});
+            });
+        }
+        async function asyncFetchAndAppend(sourceBuffer, data) {
+            sourceBuffer.appendBuffer(data);
+            await waitForEvent(sourceBuffer, "updateend");
+        }
+
+        let video = null
+        let ms, videoSb;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(main, 0);
+        });
+
+        async function main() {
+            const [
+                audioInit,
+                audioMedia,
+                videoYellowInit,
+                videoYellowMedia,
+                videoBlueInit,
+                videoBlueMedia,
+            ] = await Promise.all([
+                'assets/audio_init.mp4',
+                'assets/audio_1.m4s',
+                'assets/yellow_init.mp4',
+                'assets/yellow_1.m4s',
+                'assets/blue_init.mp4',
+                'assets/blue_1.m4s',
+            ].map(async (url) => {
+                const response = await fetch(url);
+                return await response.arrayBuffer();
+            }));
+
+            video = document.createElement('video')
+            document.body.appendChild(video);
+
+            video.addEventListener('error', function (e) {
+                reportFail('Test failed. Got an error: ' + video.error.code + ', ' + video.error.message)
+                cleanup()
+            });
+
+            // ms = await asyncPrepareMediaSource(video);
+            ms = new MediaSource();
+            video.src = URL.createObjectURL(ms);
+            await waitForEvent(ms, "sourceopen");
+
+            audioSb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
+            videoSb = ms.addSourceBuffer('video/mp4; codecs="avc1.640020"');
+
+            video.play();
+
+            console.log('Appending initialization segments...');
+            await asyncFetchAndAppend(videoSb, videoYellowInit);
+            await asyncFetchAndAppend(audioSb, audioInit);
+            console.log('Appended initialization segments...');
+
+            console.log('Appending audio...');
+            await asyncFetchAndAppend(audioSb, audioMedia);
+            console.log('Appended audio.');
+
+            console.log('Appending yellow video...');
+            await asyncFetchAndAppend(videoSb, videoYellowMedia);
+            console.log('Appended yellow video.');
+
+            console.log('Waiting for t=5');
+            await waitForTime(video, 5);
+            console.log('Appending blue video...');
+            await asyncFetchAndAppend(videoSb, videoBlueInit);
+            await asyncFetchAndAppend(videoSb, videoBlueMedia);
+            console.log('Appended blue video.');
+        }
+    </script>
+</body>
+
+</html>
