@@ -98,6 +98,7 @@
             console.log('Appending yellow video...');
             await asyncFetchAndAppend(videoSb, videoYellowMedia);
             console.log('Appended yellow video.');
+            ms.endOfStream(); await waitForEvent(ms, "sourceended");
 
             console.log('Waiting for t=5');
             await waitForTime(video, 5);
@@ -105,6 +106,7 @@
             await asyncFetchAndAppend(videoSb, videoBlueInit);
             await asyncFetchAndAppend(videoSb, videoBlueMedia);
             console.log('Appended blue video.');
+            ms.endOfStream(); await waitForEvent(ms, "sourceended");
         }
     </script>
 </body>
