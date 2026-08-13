@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset='UTF-8' />
+    <meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate' />
+    <meta http-equiv='Pragma' content='no-cache' />
+    <meta http-equiv='Expires' content='0' />
+    <title>appendBuffer() overwriting currentTime with long GOPs -- need to rewind case</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <p>The magenta video will only have content for the first 10 seconds. 2 seconds into playback, the green video is appended, which is has a single 20 seconds long GOP.</p>
+    <script type='text/javascript'>
+        function waitForTime(mediaElement, targetTime) {
+            return new Promise(resolve => {
+                const listener = mediaElement.addEventListener("timeupdate", ev => {
+                    if (mediaElement.currentTime < targetTime)
+                        return;
+                    mediaElement.removeEventListener("timeupdate", listener);
+                    resolve();
+                });
+            });
+        }
+        function waitForEvent(node, eventName) {
+            return new Promise(resolve => {
+                node.addEventListener(eventName, (ev) => {
+                    resolve(ev);
+                }, {once: true});
+            });
+        }
+        async function asyncFetchAndAppend(sourceBuffer, data) {
+            sourceBuffer.appendBuffer(data);
+            await waitForEvent(sourceBuffer, "updateend");
+        }
+
+        let video = null
+        let ms, videoSb;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(main, 0);
+        });
+
+        async function main() {
+            const [
+                audioInit,
+                audioMedia,
+                videoMagentaInit,
+                videoMagentaMedia,
+                videoGreenInit,
+                videoGreenMedia,
+            ] = await Promise.all([
+                'assets/audio_init.mp4',
+                'assets/audio_1.m4s',
+                'assets/magenta_split_init.mp4',
+                'assets/magenta_split_1.m4s',
+                'assets/green_single_gop_init.mp4',
+                'assets/green_single_gop_1.m4s',
+            ].map(async (url) => {
+                const response = await fetch(url);
+                return await response.arrayBuffer();
+            }));
+
+            video = document.createElement('video')
+            document.body.appendChild(video);
+
+            video.addEventListener('error', function (e) {
+                reportFail('Test failed. Got an error: ' + video.error.code + ', ' + video.error.message)
+                cleanup()
+            });
+
+            // ms = await asyncPrepareMediaSource(video);
+            ms = new MediaSource();
+            video.src = URL.createObjectURL(ms);
+            await waitForEvent(ms, "sourceopen");
+
+            audioSb = ms.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
+            videoSb = ms.addSourceBuffer('video/mp4; codecs="avc1.640020"');
+
+            video.play();
+
+            console.log('Appending initialization segments...');
+            await asyncFetchAndAppend(videoSb, videoMagentaInit);
+            await asyncFetchAndAppend(audioSb, audioInit);
+            console.log('Appended initialization segments...');
+
+            console.log('Appending audio...');
+            await asyncFetchAndAppend(audioSb, audioMedia);
+            console.log('Appended audio.');
+
+            console.log('Appending magenta video...');
+            await asyncFetchAndAppend(videoSb, videoMagentaMedia);
+            console.log('Appended magenta video.');
+            ms.endOfStream(); await waitForEvent(ms, "sourceended");
+
+            console.log('Waiting for t=2');
+            await waitForTime(video, 2);
+            console.log('Appending green video...');
+            await asyncFetchAndAppend(videoSb, videoGreenInit);
+            await asyncFetchAndAppend(videoSb, videoGreenMedia);
+            console.log('Appended green video.');
+            ms.endOfStream(); await waitForEvent(ms, "sourceended");
+        }
+    </script>
+</body>
+
+</html>
