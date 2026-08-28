@@ -20,7 +20,8 @@ make_video() {
 
   gst-launch-1.0 \
     compositor name=comp sink_1::ypos=140 sink_2::xpos=0 sink_2::ypos=140 ! \
-    videoconvert ! x264enc bframes=0 option-string="scenecut=0" key-int-max="$key_int_max" speed-preset=fast bitrate=10000 ! mp4mux ! filesink location="assets/${color_name}.mp4" \
+    videoconvert ! "video/x-raw,format=I420,width=1920,height=1080,framerate=(fraction)60/1" ! \
+    x264enc bframes=0 option-string="scenecut=0" key-int-max="$key_int_max" speed-preset=fast bitrate=10000 ! mp4mux ! filesink location="assets/${color_name}.mp4" \
     videotestsrc pattern=solid-color foreground-color="${color_value}" num-buffers=1200 ! \
     "video/x-raw,format=AYUV,width=1920,height=1080,framerate=(fraction)60/1" ! \
     timeoverlay font-desc="Kode Mono, 26" halignment=center ypad=6 ! queue2 ! comp. \
